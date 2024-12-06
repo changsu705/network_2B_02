@@ -1,15 +1,11 @@
 const http = require('http');
 const { Server } = require('socket.io');
 const express = require('express');
-const bodyParser = require('body-parser');
 const mysql = require('mysql2');
 
 // 서버 설정
 const app = express();
 const port = 3000;
-
-// JSON 데이터를 파싱
-app.use(bodyParser.json());
 
 // HTTP 서버와 WebSocket 서버 설정
 const server = http.createServer(app);
@@ -17,110 +13,184 @@ const io = new Server(server);
 
 // MySQL 연결 설정
 const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'your_mysql_username', // MySQL 사용자 이름
-  password: 'your_mysql_password', // MySQL 비밀번호
-  database: 'gomoku', // 데이터베이스 이름
+    host: 'localhost',
+    user: 'your_mysql_username',
+    password: 'your_mysql_password',
+    database: 'Omok',
 });
 
-// MySQL 연결
 db.connect((err) => {
-  if (err) {
-    console.error('MySQL 연결 실패:', err);
-  } else {
-    console.log('MySQL에 성공적으로 연결되었습니다.');
-  }
-});
-
-// 기본 라우트 테스트
-app.get('/', (req, res) => {
-  res.send('Gomoku 서버 실행 중!');
-});
-
-// 게임 시작 API
-app.post('/start-game', (req, res) => {
-  const query = 'INSERT INTO Game (start_time) VALUES (NOW())';
-
-  db.query(query, (err, result) => {
     if (err) {
-      console.error('게임 시작 실패:', err);
-      res.status(500).json({ error: '게임 시작 중 오류 발생' });
+        console.error('MySQL 연결 실패:', err);
     } else {
-      res.status(200).json({ message: '게임이 시작되었습니다.', gameId: result.insertId });
+        console.log('MySQL에 성공적으로 연결되었습니다.');
     }
-  });
 });
 
-// 돌 놓기 API
-app.post('/place-stone', (req, res) => {
-  const { gameId, playerId, moveNumber, x, y } = req.body;
+// 클라이언트 연결 시 처리
+io.on('connection', (socket) => {
+    console.log('클라이언트 연결됨:', socket.id);
 
-  const query = `
-    INSERT INTO Move (game_id, player_id, move_number, x_coordinate, y_coordinate)
-    VALUES (?, ?, ?, ?, ?)
-  `;
+    // 로그인 처리
+    socket.on('login', ({ username, password }) => {
+        const query = `SELECT player_id FROM Player WHERE username = ? AND password = ?`;
+        db.query(query, [username, password], (err, results) => {
+            if (err || results.length === 0) {
+                socket.emit('login-response', { success: false, message: '로그인 실패' });
+            } else {
+                socket.emit('login-response', { success: true, playerId: results[0].player_id });
+            }
+        });
+    });
 
-  db.query(query, [gameId, playerId, moveNumber, x, y], (err) => {
-    if (err) {
-      console.error('돌 놓기 실패:', err);
-      res.status(500).json({ error: '돌 놓기 중 오류 발생' });
-    } else {
-      res.status(200).json({ message: '돌을 성공적으로 놓았습니다.' });
+    // 게임 시작 처리
+    socket.on('start-game', () => {
+        const query = `INSERT INTO Game (start_time) VALUES (NOW())`;
+        db.query(query, (err, result) => {
+            if (err) {
+                socket.emit('start-game-response', { success: false });
+            } else {
+                socket.emit('start-game-response', { success: true, gameId: result.insertId });
+            }
+        });
+    });
+
+
+    //타이머//////////////////////////////////
+    const gameTimers = {}; // 게임별 타이머 관리 객체
+
+    function startTurnTimer(gameId, duration) {
+        if (gameTimers[gameId]) {
+            clearTimeout(gameTimers[gameId]); // 기존 타이머 제거
+        }
+
+        gameTimers[gameId] = setTimeout(() => {
+            // 현재 게임의 마지막 move_number 조회
+            const getLastMoveQuery = `SELECT IFNULL(MAX(move_number), 0) AS last_move FROM Move WHERE game_id = ?`;
+
+            db.query(getLastMoveQuery, [gameId], (err, results) => {
+                if (err || results.length === 0) {
+                    console.error('타이머 처리 중 오류 발생:', err);
+                    return;
+                }
+
+                const lastMoveNumber = results[0].last_move;
+                const nextPlayerId = (lastMoveNumber % 2 === 0) ? 2 : 1; // 홀짝으로 턴 결정
+
+                // 강제로 다음 턴으로 이동 (move_number 증가)
+                const insertMoveQuery = `
+        INSERT INTO Move (game_id, player_id, move_number, x_coordinate, y_coordinate)
+        VALUES (?, ?, ?, ?, ?)
+      `;
+
+                db.query(insertMoveQuery, [gameId, nextPlayerId, lastMoveNumber + 1, -1, -1], (err) => {
+                    if (err) {
+                        console.error('다음 턴 강제 전환 실패:', err);
+                        return;
+                    }
+
+                    // 클라이언트에 턴 전환 알림
+                    io.emit('update-turn', { gameId, currentPlayerId: nextPlayerId });
+
+                    // 다음 턴 타이머 시작
+                    startTurnTimer(gameId, duration);
+                });
+            });
+        }, duration * 1000); // duration(초)을 밀리초로 변환
     }
-  });
-});
 
-// 승패 관리 API
-app.post('/end-game', (req, res) => {
-  const { gameId, winnerId } = req.body;
+    // 돌 놓기 처리 시 타이머 재설정
+    socket.on('place-stone', (data) => {
+        const { gameId, playerId } = data;
 
-  const query = `
-    UPDATE Game 
-    SET end_time = NOW(), winner_id = ?
+        // 돌을 놓았으므로 타이머 재설정
+        startTurnTimer(gameId, 30); // 예시: 30초 타이머
+    });
+
+    //타이머//////////////////////////////////
+
+    // 돌 놓기 처리
+    socket.on('place-stone', ({ gameId, playerId, x, y }) => {
+        // 현재 게임의 마지막 move_number를 조회하여 턴 확인
+        const checkTurnQuery = `
+    SELECT IFNULL(MAX(move_number), 0) AS last_move 
+    FROM Move 
     WHERE game_id = ?
   `;
 
-  db.query(query, [winnerId, gameId], (err) => {
-    if (err) {
-      console.error('게임 종료 실패:', err);
-      res.status(500).json({ error: '게임 종료 중 오류 발생' });
-    } else {
-      res.status(200).json({ message: '게임이 성공적으로 종료되었습니다.' });
-    }
-  });
-});
+        db.query(checkTurnQuery, [gameId], (err, results) => {
+            if (err) {
+                socket.emit('place-stone-response', { success: false, message: '오류 발생: 게임 정보를 가져올 수 없습니다.' });
+                return;
+            }
 
-// WebSocket 연결
-io.on('connection', (socket) => {
-  console.log('클라이언트 연결됨:', socket.id);
+            const lastMoveNumber = results[0].last_move;
+            const expectedPlayerId = (lastMoveNumber % 2 === 0) ? 1 : 2;
 
-  // 돌 놓기 이벤트
-  socket.on('place-stone', (data) => {
-    const { gameId, playerId, moveNumber, x, y } = data;
+            if (playerId !== expectedPlayerId) {
+                socket.emit('place-stone-response', { success: false, message: '당신의 턴이 아닙니다.' });
+                return;
+            }
 
-    const query = `
-      INSERT INTO Move (game_id, player_id, move_number, x_coordinate, y_coordinate)
-      VALUES (?, ?, ?, ?, ?)
+            // 이미 해당 좌표에 돌이 있는지 추가 확인
+            const checkDuplicateQuery = `
+      SELECT 1 
+      FROM Move 
+      WHERE game_id = ? AND x_coordinate = ? AND y_coordinate = ?
     `;
 
-    db.query(query, [gameId, playerId, moveNumber, x, y], (err) => {
-      if (err) {
-        console.error('돌 놓기 실패:', err);
-        socket.emit('error', { message: '돌 놓기 실패' });
-      } else {
-        // 모든 클라이언트에게 돌 위치 전송
-        io.emit('stone-placed', { gameId, playerId, moveNumber, x, y });
-      }
-    });
-  });
+            db.query(checkDuplicateQuery, [gameId, x, y], (err, results) => {
+                if (err) {
+                    socket.emit('place-stone-response', { success: false, message: '오류 발생: 중복 확인 실패.' });
+                    return;
+                }
 
-  // 연결 해제 이벤트
-  socket.on('disconnect', () => {
-    console.log('클라이언트 연결 해제:', socket.id);
-  });
+                if (results.length > 0) {
+                    socket.emit('place-stone-response', { success: false, message: '이미 해당 위치에 돌이 놓여 있습니다.' });
+                    return;
+                }
+
+                // 중복이 없으면 돌을 놓음
+                const insertStoneQuery = `
+        INSERT INTO Move (game_id, player_id, move_number, x_coordinate, y_coordinate)
+        VALUES (?, ?, ?, ?, ?)
+      `;
+
+                db.query(insertStoneQuery, [gameId, playerId, lastMoveNumber + 1, x, y], (err, results) => {
+                    if (err) {
+                        socket.emit('place-stone-response', { success: false, message: '돌 놓기 중 오류가 발생했습니다.' });
+                    } else {
+                        // 돌 놓기 성공
+                        socket.emit('place-stone-response', { success: true, moveNumber: lastMoveNumber + 1 });
+                        io.emit('update-turn', { gameId, nextPlayerId: (playerId === 1 ? 2 : 1) });
+                    }
+                });
+            });
+        });
+    });
+
+
+    // 게임 종료 처리
+    socket.on('end-game', ({ gameId, winnerId }) => {
+        const query = `
+      UPDATE Game SET end_time = NOW(), winner_id = ? WHERE game_id = ?
+    `;
+        db.query(query, [winnerId, gameId], (err) => {
+            if (err) {
+                socket.emit('end-game-response', { success: false });
+            } else {
+                socket.emit('end-game-response', { success: true });
+            }
+        });
+    });
+
+    // 연결 해제 시
+    socket.on('disconnect', () => {
+        console.log('클라이언트 연결 해제:', socket.id);
+    });
 });
 
 // 서버 시작
 server.listen(port, () => {
-  console.log(`서버가 http://localhost:${port}에서 실행 중입니다.`);
+    console.log(`서버가 http://localhost:${port}에서 실행 중입니다.`);
 });
