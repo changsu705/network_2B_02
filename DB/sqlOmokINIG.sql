@@ -15,11 +15,11 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 
--- omok 데이터베이스 구조 내보내기
-CREATE DATABASE IF NOT EXISTS `omok` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
-USE `omok`;
+-- game_db_05 데이터베이스 구조 내보내기
+CREATE DATABASE IF NOT EXISTS `game_db_05` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
+USE `game_db_05`;
 
--- 테이블 omok.game 구조 내보내기
+-- 테이블 game_db_05.game 구조 내보내기
 CREATE TABLE IF NOT EXISTS `game` (
   `game_id` int NOT NULL AUTO_INCREMENT,
   `start_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
@@ -31,10 +31,9 @@ CREATE TABLE IF NOT EXISTS `game` (
   CONSTRAINT `game_ibfk_1` FOREIGN KEY (`winner_id`) REFERENCES `player` (`player_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- 테이블 데이터 omok.game:~0 rows (대략적) 내보내기
-DELETE FROM `game`;
+-- 테이블 데이터 game_db_05.game:~0 rows (대략적) 내보내기
 
--- 테이블 omok.move 구조 내보내기
+-- 테이블 game_db_05.move 구조 내보내기
 CREATE TABLE IF NOT EXISTS `move` (
   `move_id` int NOT NULL AUTO_INCREMENT,
   `game_id` int DEFAULT NULL,
@@ -50,10 +49,9 @@ CREATE TABLE IF NOT EXISTS `move` (
   CONSTRAINT `move_ibfk_2` FOREIGN KEY (`player_id`) REFERENCES `player` (`player_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- 테이블 데이터 omok.move:~0 rows (대략적) 내보내기
-DELETE FROM `move`;
+-- 테이블 데이터 game_db_05.move:~0 rows (대략적) 내보내기
 
--- 테이블 omok.player 구조 내보내기
+-- 테이블 game_db_05.player 구조 내보내기
 CREATE TABLE IF NOT EXISTS `player` (
   `player_id` int NOT NULL AUTO_INCREMENT,
   `username` varchar(50) NOT NULL,
@@ -63,8 +61,7 @@ CREATE TABLE IF NOT EXISTS `player` (
   UNIQUE KEY `username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- 테이블 데이터 omok.player:~0 rows (대략적) 내보내기
-DELETE FROM `player`;
+-- 테이블 데이터 game_db_05.player:~0 rows (대략적) 내보내기
 
 /*!40103 SET TIME_ZONE=IFNULL(@OLD_TIME_ZONE, 'system') */;
 /*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;
