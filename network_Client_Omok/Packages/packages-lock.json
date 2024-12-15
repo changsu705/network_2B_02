@@ -135,6 +135,17 @@
       },
       "url": "https://packages.unity.com"
     },
+    "socket.io-client": {
+      "version": "file:socket.io-client",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "@socket.io/component-emitter": "~3.1.0",
+        "debug": "~4.3.2",
+        "engine.io-client": "~6.6.1",
+        "socket.io-parser": "~4.2.4"
+      }
+    },
     "com.unity.modules.ai": {
       "version": "1.0.0",
       "depth": 0,

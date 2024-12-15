@@ -194,3 +194,11 @@ io.on('connection', (socket) => {
 server.listen(port, () => {
     console.log(`서버가 http://localhost:${port}에서 실행 중입니다.`);
 });
+
+
+const cors = require('cors');
+
+// CORS 설정 추가
+app.use(cors({
+    origin: '*', // Unity 클라이언트의 URL을 명시하거나 '*'로 모든 요청 허용
+}));
